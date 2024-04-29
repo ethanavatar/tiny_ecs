@@ -18,7 +18,6 @@ fn hurt_all(world: &mut World) {
 }
 
 fn kill_dead(world: &mut World) {
-
     let mut dead_entities = Vec::new();
     {
         let health = world.borrow_components::<Health>().unwrap();
@@ -28,7 +27,6 @@ fn kill_dead(world: &mut World) {
             .iter()
             .zip(positions.iter())
             .collect::<Vec<_>>();
-
 
         for (entity_id, (h, p)) in it.iter().enumerate() {
             if let (Some(h), Some(p)) = (h, p) {

@@ -1,4 +1,4 @@
-use std::cell::{RefCell, RefMut};
+use std::{cell::{RefCell, RefMut}, collections::HashMap};
 
 trait ComponentStorage {
     fn as_any(&self) -> &dyn std::any::Any;
@@ -20,7 +20,7 @@ impl<T: 'static> ComponentStorage for RefCell<Vec<Option<T>>> {
 
 pub struct World {
     entity_count: usize,
-    components: Vec<Box<dyn ComponentStorage>>,
+    components: HashMap<std::any::TypeId, Box<dyn ComponentStorage>>,
     free_entities: Vec<usize>,
 }
 
@@ -28,7 +28,7 @@ impl World {
     pub fn new() -> Self {
         World {
             entity_count: 0,
-            components: Vec::new(),
+            components: HashMap::new(),
             free_entities: Vec::new(),
         }
     }
@@ -40,7 +40,7 @@ impl World {
             return entity_id;
         }
 
-        for c in self.components.iter_mut() {
+        for (_id, c) in self.components.iter_mut() {
             c.push_none();
         }
 
@@ -49,7 +49,7 @@ impl World {
     }
 
     pub fn remove_entity(&mut self, entity_id: usize) {
-        for c in self.components.iter_mut() {
+        for (_id, c) in self.components.iter_mut() {
             c.none_at(entity_id);
         }
 
@@ -65,35 +65,37 @@ impl World {
         entity_id: usize,
         component: T,
     ) {
-        for c in self.components.iter_mut() {
-            if let Some(c) = c
-                .as_any_mut()
-                .downcast_mut::<RefCell<Vec<Option<T>>>>()
-            {
-                c.get_mut()[entity_id] = Some(component);
-                return;
-            }
+        let component_id = std::any::TypeId::of::<T>();
+        let c = self.components.entry(component_id)
+            .or_insert_with(|| {
+                let mut new_storage: Vec<Option<T>> = Vec::with_capacity(self.entity_count);
+                for _ in 0..self.entity_count {
+                    new_storage.push(None);
+                }
+
+                Box::new(RefCell::new(new_storage))
+            });
+
+        if let Some(c) = c
+            .as_any_mut()
+            .downcast_mut::<RefCell<Vec<Option<T>>>>()
+        {
+            c.get_mut()[entity_id] = Some(component);
+            return;
         }
 
-        let mut new_storage = Vec::with_capacity(self.entity_count);
-        for _ in 0..self.entity_count {
-            new_storage.push(None);
-        }
-
-        new_storage[entity_id] = Some(component);
-        self.components.push(Box::new(RefCell::new(new_storage)));
     }
 
     pub fn borrow_components<T: 'static>(
         &self,
     ) -> Option<RefMut<Vec<Option<T>>>> {
-        for c in self.components.iter() {
-            if let Some(c) = c
-                .as_any()
-                .downcast_ref::<RefCell<Vec<Option<T>>>>()
-            {
-                return Some(c.borrow_mut());
-            }
+        let component_id = std::any::TypeId::of::<T>();
+        let c = self.components.get(&component_id)?;
+        if let Some(c) = c
+            .as_any()
+            .downcast_ref::<RefCell<Vec<Option<T>>>>()
+        {
+            return Some(c.borrow_mut());
         }
 
         None
