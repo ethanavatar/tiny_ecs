@@ -1,11 +1,11 @@
 use tiny_ecs::world::World;
 use tiny_ecs::systems::Systems;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[allow(dead_code)]
 struct Health(i32);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[allow(dead_code)]
 struct Position(f32, f32);
 
