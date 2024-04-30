@@ -1,6 +1,5 @@
-mod world;
-use world::World;
-use world::Systems;
+use tiny_ecs::world::World;
+use tiny_ecs::systems::Systems;
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -12,7 +11,8 @@ struct Position(f32, f32);
 
 fn hurt_all(world: &mut World) {
     let mut health = world.borrow_components::<Health>().unwrap();
-    for h in health.iter_mut().flatten() {
+    for (entity_id, h) in health.iter_mut().flatten().enumerate() {
+        println!("Hurt entity {} by 50. Was: {}, Now: {}", entity_id, h.0, h.0 - 50);
         h.0 -= 50;
     }
 }
@@ -80,16 +80,28 @@ fn main() {
 
     systems.run(&mut world);
 
-    println!("After update 1");
+
     println!("----------------------");
+    println!("After update 1");
     println!("entity count: {}", world.count_entities());
+    println!("----------------------\n");
     print_components(&mut world);
 
     let entity3 = world.new_entity();
     world.add_component(entity3, Health(69));
     world.add_component(entity3, Position(3.0, 1.0));
 
+    println!("----------------------");
     println!("After adding entity 3");
     println!("entity count: {}", world.count_entities());
+    println!("----------------------\n");
+
+    systems.run(&mut world);
+
+    println!("----------------------");
+    println!("After update 2");
+    println!("entity count: {}", world.count_entities());
+    println!("----------------------\n");
+
     print_components(&mut world);
 }

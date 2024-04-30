@@ -1,22 +1,7 @@
-use std::{cell::{RefCell, RefMut}, collections::HashMap};
+use std::cell::{RefCell, RefMut};
+use std::collections::HashMap;
 
-trait ComponentStorage {
-    fn as_any(&self) -> &dyn std::any::Any;
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
-    fn push_none(&mut self);
-    fn none_at(&self, index: usize);
-}
-
-impl<T: 'static> ComponentStorage for RefCell<Vec<Option<T>>> {
-    fn as_any(&self) -> &dyn std::any::Any { self }
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
-    fn push_none(&mut self) {
-        self.get_mut().push(None);
-    }
-    fn none_at(&self, index: usize) {
-        self.borrow_mut()[index] = None;
-    }
-}
+use crate::component_storage::ComponentStorage;
 
 pub struct World {
     entity_count: usize,
@@ -102,25 +87,3 @@ impl World {
     }
 }
 
-pub struct Systems {
-    systems: Vec<Box<dyn Fn(&mut World)>>,
-}
-
-impl Systems {
-    pub fn new() -> Self {
-        Systems {
-            systems: Vec::new(),
-        }
-    }
-
-    pub fn add_system<F: 'static>(&mut self, system: F)
-    where
-        F: Fn(&mut World),
-    {
-        self.systems.push(Box::new(system));
-    }
-
-    pub fn run(&self, world: &mut World) {
-        self.systems.iter().for_each(|s| s(world));
-    }
-}
