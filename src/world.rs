@@ -4,8 +4,14 @@ use std::collections::HashMap;
 use crate::component::Component;
 use crate::component_storage::ComponentStorage;
 
+pub struct Entity {
+    id: usize,
+    has_components: Vec<std::any::TypeId>,
+}
+
 pub struct World {
     entity_count: usize,
+    entities: Vec<Entity>,
     components: HashMap<std::any::TypeId, Box<dyn ComponentStorage>>,
     free_entity_slots: Vec<usize>,
 }
@@ -14,6 +20,7 @@ impl World {
     pub fn new() -> Self {
         World {
             entity_count: 0,
+            entities: Vec::new(),
             components: HashMap::new(),
             free_entity_slots: Vec::new(),
         }
@@ -21,9 +28,12 @@ impl World {
 
     pub fn new_entity(
         &mut self,
-    ) -> usize {
+    ) -> Entity {
         if let Some(entity_id) = self.free_entity_slots.pop() {
-            return entity_id;
+            return Entity {
+                id: entity_id,
+                has_components: Vec::new(),
+            };
         }
 
         for (_id, c) in self.components.iter_mut() {
@@ -31,7 +41,10 @@ impl World {
         }
 
         self.entity_count += 1;
-        self.entity_count - 1
+        Entity {
+            id: self.entity_count - 1,
+            has_components: Vec::new(),
+        }
     }
 
     pub fn remove_entity(&mut self, entity_id: usize) {
@@ -48,7 +61,7 @@ impl World {
 
     pub fn add_component<T: Component>(
         &mut self,
-        entity_id: usize,
+        entity: &Entity,
         component: T,
     ) {
         let component_id = std::any::TypeId::of::<T>();
@@ -61,7 +74,7 @@ impl World {
         if let Some(c) = c.as_any_mut()
             .downcast_mut::<RefCell<Vec<Option<T>>>>()
         {
-            c.get_mut()[entity_id] = Some(component);
+            c.get_mut()[entity.id] = Some(component);
             return;
         }
 

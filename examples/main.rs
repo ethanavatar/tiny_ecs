@@ -66,12 +66,12 @@ fn print_components(world: &mut World) {
 fn main() {
     let mut world = World::new();
     let entity1 = world.new_entity();
-    world.add_component(entity1, Health(50));
-    world.add_component(entity1, Position(1.0, 1.0));
+    world.add_component(&entity1, Health(50));
+    world.add_component(&entity1, Position(1.0, 1.0));
 
     let entity2 = world.new_entity();
-    world.add_component(entity2, Health(100));
-    world.add_component(entity2, Position(2.0, 1.0));
+    world.add_component(&entity2, Health(100));
+    world.add_component(&entity2, Position(2.0, 1.0));
 
     let mut systems = Systems::new();
     systems.add_system(hurt_all);
@@ -88,8 +88,8 @@ fn main() {
     print_components(&mut world);
 
     let entity3 = world.new_entity();
-    world.add_component(entity3, Health(69));
-    world.add_component(entity3, Position(3.0, 1.0));
+    world.add_component(&entity3, Health(69));
+    world.add_component(&entity3, Position(3.0, 1.0));
 
     println!("----------------------");
     println!("After adding entity 3");
