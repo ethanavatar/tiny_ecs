@@ -1,9 +1,25 @@
 use std::any::TypeId;
+use std::marker::PhantomData;
 use std::collections::HashMap;
 use std::cell::{RefCell, RefMut};
 
 use crate::component::Component;
 use crate::component_storage::ComponentStorage;
+
+pub struct ComponentPointer<T: Component> {
+    entity_id: usize,
+    component_type: PhantomData<T>,
+}
+
+impl<T: Component> ComponentPointer<T> {
+    pub fn to(entity_id: usize) -> Self {
+        ComponentPointer { entity_id, component_type: PhantomData }
+    }
+
+    pub fn get(&self, world: &World) -> Option<T> {
+        world.get_component::<T>(self.entity_id)
+    }
+}
 
 pub struct World {
     entity_count: usize,
