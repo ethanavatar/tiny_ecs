@@ -1,18 +1,13 @@
-use std::cell::{RefCell, RefMut};
+use std::any::TypeId;
 use std::collections::HashMap;
+use std::cell::{RefCell, RefMut};
 
 use crate::component::Component;
 use crate::component_storage::ComponentStorage;
 
-pub struct Entity {
-    id: usize,
-    has_components: Vec<std::any::TypeId>,
-}
-
 pub struct World {
     entity_count: usize,
-    entities: Vec<Entity>,
-    components: HashMap<std::any::TypeId, Box<dyn ComponentStorage>>,
+    components: HashMap<TypeId, Box<dyn ComponentStorage>>,
     free_entity_slots: Vec<usize>,
 }
 
@@ -20,7 +15,6 @@ impl World {
     pub fn new() -> Self {
         World {
             entity_count: 0,
-            entities: Vec::new(),
             components: HashMap::new(),
             free_entity_slots: Vec::new(),
         }
@@ -28,29 +22,21 @@ impl World {
 
     pub fn new_entity(
         &mut self,
-    ) -> Entity {
+    ) -> usize {
         if let Some(entity_id) = self.free_entity_slots.pop() {
-            return Entity {
-                id: entity_id,
-                has_components: Vec::new(),
-            };
+            return entity_id;
         }
 
-        for (_id, c) in self.components.iter_mut() {
-            c.push_none();
-        }
+        self.components.iter_mut()
+            .for_each(|(_, c)| c.push_none());
 
         self.entity_count += 1;
-        Entity {
-            id: self.entity_count - 1,
-            has_components: Vec::new(),
-        }
+        self.entity_count - 1
     }
 
     pub fn remove_entity(&mut self, entity_id: usize) {
-        for (_id, c) in self.components.iter_mut() {
-            c.none_at(entity_id);
-        }
+        self.components.iter_mut()
+            .for_each(|(_, c)| c.none_at(entity_id));
 
         self.free_entity_slots.push(entity_id);
     }
@@ -59,39 +45,56 @@ impl World {
         self.entity_count - self.free_entity_slots.len()
     }
 
+    pub fn get_component<T: Component>(
+        &self,
+        entity_id: usize,
+    ) -> Option<T> {
+        let component_id = TypeId::of::<T>();
+        self.components.get(&component_id)
+            .map(|c| c.as_any()
+                .downcast_ref::<RefCell<Vec<Option<T>>>>()
+                .map(|c| c.borrow()[entity_id].clone())
+                .flatten())
+            .flatten()
+    }
+
+    pub fn entity_has<T: Component>(&self, entity_id: usize) -> bool {
+        self.get_component::<T>(entity_id).is_some()
+    }
+
     pub fn add_component<T: Component>(
         &mut self,
-        entity: &Entity,
+        entity_id: usize,
         component: T,
     ) {
-        let component_id = std::any::TypeId::of::<T>();
-        let c = self.components.entry(component_id)
+        let component_id = TypeId::of::<T>();
+        self.components.entry(component_id)
             .or_insert_with(|| {
                 let new_storage: Vec<Option<T>> = vec![None; self.entity_count];
                 Box::new(RefCell::new(new_storage))
-            });
-
-        if let Some(c) = c.as_any_mut()
+            })
+            .as_any_mut()
             .downcast_mut::<RefCell<Vec<Option<T>>>>()
-        {
-            c.get_mut()[entity.id] = Some(component);
-            return;
-        }
+            .map(|c| c.get_mut()[entity_id] = Some(component));
+    }
 
+    pub fn remove_component<T: Component>(
+        &mut self,
+        entity_id: usize,
+    ) {
+        let component_id = TypeId::of::<T>();
+        self.components.get(&component_id)
+            .map(|c| c.none_at(entity_id));
     }
 
     fn borrow_storage<T: Component>(
         &self,
     ) -> Option<&RefCell<Vec<Option<T>>>> {
-        let component_id = std::any::TypeId::of::<T>();
-        let c = self.components.get(&component_id)?;
-        if let Some(c) = c.as_any()
+        let component_id = TypeId::of::<T>();
+        self.components.get(&component_id)?
+            .as_any()
             .downcast_ref::<RefCell<Vec<Option<T>>>>()
-        {
-            return Some(c);
-        }
-
-        None
+            .map(|c| return c)
     }
 
     pub fn borrow_components<T: Component>(
