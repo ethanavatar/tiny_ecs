@@ -6,6 +6,7 @@ use std::cell::{RefCell, RefMut};
 use crate::component::Component;
 use crate::component_storage::ComponentStorage;
 
+#[derive(Debug, Clone)]
 pub struct ComponentPointer<T: Component> {
     entity_id: usize,
     component_type: PhantomData<T>,
@@ -74,6 +75,21 @@ impl World {
             .flatten()
     }
 
+    pub fn replace_component<T: Component>(
+        &mut self,
+        entity_id: usize,
+        component: T,
+    ) {
+        let component_id = TypeId::of::<T>();
+        if let Some(bucket) = self.components.get_mut(&component_id) {
+            bucket.as_any_mut()
+                .downcast_mut::<RefCell<Vec<Option<T>>>>()
+                .map(|c| c.get_mut()[entity_id] = Some(component));
+        } else {
+            self.add_component(entity_id, component);
+        }
+    }
+
     pub fn entity_has<T: Component>(&self, entity_id: usize) -> bool {
         self.get_component::<T>(entity_id).is_some()
     }
@@ -82,7 +98,7 @@ impl World {
         &mut self,
         entity_id: usize,
         component: T,
-    ) {
+    ) -> ComponentPointer<T> {
         let component_id = TypeId::of::<T>();
         self.components.entry(component_id)
             .or_insert_with(|| {
@@ -92,6 +108,8 @@ impl World {
             .as_any_mut()
             .downcast_mut::<RefCell<Vec<Option<T>>>>()
             .map(|c| c.get_mut()[entity_id] = Some(component));
+
+        ComponentPointer::<T>::to(entity_id)
     }
 
     pub fn remove_component<T: Component>(
