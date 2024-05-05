@@ -1,29 +1,45 @@
-use std::any::TypeId;
+use std::any::{Any, TypeId};
 use std::marker::PhantomData;
 use std::collections::HashMap;
 use std::cell::{RefCell, RefMut};
+use std::rc::Rc;
 
 use crate::component::Component;
 use crate::component_storage::ComponentStorage;
 
-#[derive(Debug, Clone)]
-pub struct ComponentPointer<T: Component> {
+#[derive(Debug, Clone, PartialEq)]
+pub struct ComponentHandle {
     entity_id: usize,
-    component_type: PhantomData<T>,
+    component_type: TypeId,
 }
 
-impl<T: Component> ComponentPointer<T> {
-    pub fn to(entity_id: usize) -> Self {
-        ComponentPointer { entity_id, component_type: PhantomData }
+impl ComponentHandle {
+    pub fn to<T: Component>(entity_id: usize) -> Self {
+        ComponentHandle { entity_id, component_type: TypeId::of::<T>() }
     }
 
-    pub fn get(&self, world: &World) -> Option<T> {
+    pub fn repoint<T: Component>(&mut self, entity_id: usize) {
+        self.entity_id = entity_id;
+        self.component_type = TypeId::of::<T>();
+    }
+
+    pub fn get<T: Component>(&self, world: &World) -> Option<T> {
         world.get_component::<T>(self.entity_id)
+    }
+
+    pub fn equals<T: Component>(&self, other: &ComponentHandle) -> bool {
+        self.entity_id == other.entity_id
+        && self.component_type == other.component_type
+    }
+
+    pub fn component_type(&self) -> TypeId {
+        self.component_type
     }
 }
 
 pub struct World {
     entity_count: usize,
+    active_handles: HashMap<TypeId, Vec<Rc<RefCell<ComponentHandle>>>>,
     components: HashMap<TypeId, Box<dyn ComponentStorage>>,
     free_entity_slots: Vec<usize>,
 }
@@ -32,6 +48,7 @@ impl World {
     pub fn new() -> Self {
         World {
             entity_count: 0,
+            active_handles: HashMap::new(),
             components: HashMap::new(),
             free_entity_slots: Vec::new(),
         }
@@ -75,18 +92,19 @@ impl World {
             .flatten()
     }
 
-    pub fn replace_component<T: Component>(
+    pub fn repoint_any<OldT: Component, NewT: Component>(
         &mut self,
-        entity_id: usize,
-        component: T,
+        old_entity_id: usize,
+        new_entity_id: usize,
     ) {
-        let component_id = TypeId::of::<T>();
-        if let Some(bucket) = self.components.get_mut(&component_id) {
-            bucket.as_any_mut()
-                .downcast_mut::<RefCell<Vec<Option<T>>>>()
-                .map(|c| c.get_mut()[entity_id] = Some(component));
-        } else {
-            self.add_component(entity_id, component);
+        let old_component_type = TypeId::of::<OldT>();
+        if let Some(handles) = self.active_handles.get_mut(&old_component_type) {
+            handles.iter_mut()
+                .for_each(|h| {
+                    if h.borrow().entity_id == old_entity_id {
+                        h.borrow_mut().repoint::<NewT>(new_entity_id);
+                    }
+                });
         }
     }
 
@@ -98,7 +116,7 @@ impl World {
         &mut self,
         entity_id: usize,
         component: T,
-    ) -> ComponentPointer<T> {
+    ) -> Rc<RefCell<ComponentHandle>> {
         let component_id = TypeId::of::<T>();
         self.components.entry(component_id)
             .or_insert_with(|| {
@@ -109,7 +127,13 @@ impl World {
             .downcast_mut::<RefCell<Vec<Option<T>>>>()
             .map(|c| c.get_mut()[entity_id] = Some(component));
 
-        ComponentPointer::<T>::to(entity_id)
+        let handle = ComponentHandle::to::<T>(entity_id);
+        let handle = Rc::new(RefCell::new(handle));
+        self.active_handles.entry(component_id)
+            .or_insert_with(Vec::new)
+            .push(handle.clone());
+
+        handle
     }
 
     pub fn remove_component<T: Component>(
@@ -119,6 +143,10 @@ impl World {
         let component_id = TypeId::of::<T>();
         self.components.get(&component_id)
             .map(|c| c.none_at(entity_id));
+
+        if let Some(handles) = self.active_handles.get_mut(&component_id) {
+            handles.retain(|h| h.borrow().entity_id != entity_id);
+        }
     }
 
     fn borrow_storage<T: Component>(
