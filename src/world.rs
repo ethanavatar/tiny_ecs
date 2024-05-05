@@ -1,5 +1,4 @@
-use std::any::{Any, TypeId};
-use std::marker::PhantomData;
+use std::any::TypeId;
 use std::collections::HashMap;
 use std::cell::{RefCell, RefMut};
 use std::rc::Rc;
@@ -98,13 +97,37 @@ impl World {
         new_entity_id: usize,
     ) {
         let old_component_type = TypeId::of::<OldT>();
+        let old_handle = ComponentHandle::to::<OldT>(old_entity_id);
         if let Some(handles) = self.active_handles.get_mut(&old_component_type) {
             handles.iter_mut()
                 .for_each(|h| {
-                    if h.borrow().entity_id == old_entity_id {
+                    if h.borrow().equals::<OldT>(&old_handle) {
                         h.borrow_mut().repoint::<NewT>(new_entity_id);
                     }
                 });
+        }
+
+        self.release_orphaned_handles::<OldT>();
+    }
+
+    pub fn release_orphaned_handles<T: Component>(&mut self) {
+
+        // FIXME: This implementation feel pretty clunky. Im sure it can be better
+
+        let component_type = TypeId::of::<T>();
+
+        if let Some(handles) = self.active_handles.get_mut(&component_type) {
+            handles.retain(|h| {
+                let entity_id = h.borrow().entity_id;
+                let is_orphan = self.components.get(&component_type)
+                    .map(|c| c.as_any()
+                        .downcast_ref::<RefCell<Vec<Option<T>>>>()
+                        .map(|c| c.borrow()[entity_id].is_none())
+                        .unwrap_or(true))
+                    .unwrap_or(true);
+
+                !is_orphan
+            });
         }
     }
 
